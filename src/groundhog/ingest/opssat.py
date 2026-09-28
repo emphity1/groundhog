@@ -23,9 +23,10 @@ import csv
 import hashlib
 import io
 import math
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from itertools import pairwise
+from itertools import groupby, pairwise
 from pathlib import Path
 from typing import Any, Literal
 
@@ -34,7 +35,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from groundhog.ingest import IngestError
 from groundhog.schema import ChannelKind, Quality, Reading
 
-__all__ = ["ChannelSpec", "OpssatSource", "OpssatSourceConfig", "nominal_values"]
+__all__ = [
+    "ChannelSpec",
+    "LabelledSample",
+    "LabelledSegment",
+    "OpssatSource",
+    "OpssatSourceConfig",
+    "labelled_samples",
+    "labelled_segments",
+    "nominal_values",
+]
 
 # Part of the dataset's format, not a tunable.
 _COLUMNS = ("channel", "timestamp", "value")
@@ -136,13 +146,39 @@ def _parse(text: str, path: Path) -> dict[str, tuple[list[datetime], list[float]
     return series
 
 
-def nominal_values(
-    path: Path, start: datetime | None, end: datetime | None
-) -> dict[str, list[float]]:
-    """Per channel, the values labelled nominal with ``start <= mission_ts < end``.
+@dataclass(frozen=True)
+class LabelledSample:
+    """One row of ``segments.csv`` with its ground truth and split."""
 
-    For fitting on a training window, and nothing else: labels never reach the
-    stream, which is read through :class:`OpssatSource`.
+    channel: str
+    mission_ts: datetime
+    value: float
+    anomaly: bool
+    segment: int
+    sampling_s: int
+    train: bool
+    """The dataset's own split, used only for the comparison with the literature."""
+
+
+@dataclass(frozen=True)
+class LabelledSegment:
+    """One labelled segment: a window of one channel, from its first to its last sample."""
+
+    id: int
+    channel: str
+    sampling_s: int
+    anomaly: bool
+    train: bool
+    start: datetime
+    end: datetime
+    samples: int
+
+
+def labelled_samples(path: Path) -> list[LabelledSample]:
+    """Every row of ``segments.csv``, in file order, with its labels.
+
+    For fitting and for scoring, never for streaming: labels never reach a reading,
+    which is read through :class:`OpssatSource`.
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -150,21 +186,82 @@ def nominal_values(
         raise IngestError(f"{path} not found: fetch it with `make data-fetch DS=opssat`") from None
     rows = csv.reader(io.StringIO(text))
     header = next(rows, None)
-    columns = (*_COLUMNS, "anomaly")
+    columns = (*_COLUMNS, "anomaly", "segment", "sampling", "train")
     if header is None or not set(columns) <= set(header):
         raise IngestError(f"{path}: expected columns {', '.join(columns)}, found {header}")
     at = [header.index(column) for column in columns]
 
-    nominal: dict[str, list[float]] = {}
+    samples = []
     for line, row in enumerate(rows, start=2):
         channel, mission_ts, value = _measurement(row, at, path, line)
-        label = row[at[3]]
-        if label not in ("0", "1"):
-            raise IngestError(f"{path}:{line}: anomaly label {label!r} is neither 0 nor 1")
-        in_window = (start is None or mission_ts >= start) and (end is None or mission_ts < end)
-        if in_window and label == "0":
-            nominal.setdefault(channel, []).append(value)
+        anomaly, segment, sampling, train = (row[i] for i in at[3:])
+        if anomaly not in ("0", "1"):
+            raise IngestError(f"{path}:{line}: anomaly label {anomaly!r} is neither 0 nor 1")
+        if train not in ("0", "1"):
+            raise IngestError(f"{path}:{line}: train flag {train!r} is neither 0 nor 1")
+        if not (segment.isdigit() and sampling.isdigit() and int(sampling) > 0):
+            raise IngestError(
+                f"{path}:{line}: segment {segment!r} and sampling {sampling!r} must be "
+                "a non-negative and a positive integer"
+            )
+        samples.append(
+            LabelledSample(
+                channel=channel,
+                mission_ts=mission_ts,
+                value=value,
+                anomaly=anomaly == "1",
+                segment=int(segment),
+                sampling_s=int(sampling),
+                train=train == "1",
+            )
+        )
+    return samples
+
+
+def nominal_values(
+    samples: Iterable[LabelledSample],
+    start: datetime | None,
+    end: datetime | None,
+    *,
+    official_train: bool = False,
+) -> dict[str, list[float]]:
+    """Per channel, the values labelled nominal with ``start <= mission_ts < end``.
+
+    With ``official_train``, only those of segments the dataset's own split marks
+    for training: the comparison with the literature fits there (ADR 0001).
+    """
+    nominal: dict[str, list[float]] = {}
+    for s in samples:
+        in_window = (start is None or s.mission_ts >= start) and (end is None or s.mission_ts < end)
+        if in_window and not s.anomaly and (s.train or not official_train):
+            nominal.setdefault(s.channel, []).append(s.value)
     return nominal
+
+
+def labelled_segments(samples: Iterable[LabelledSample]) -> list[LabelledSegment]:
+    """The segments, by channel and then start. Only time varies within a segment."""
+    segments = []
+    for segment, group in groupby(sorted(samples, key=lambda s: s.segment), lambda s: s.segment):
+        members = sorted(group, key=lambda s: s.mission_ts)
+        first = members[0]
+        uniform = {(s.channel, s.sampling_s, s.anomaly, s.train) for s in members}
+        if len(uniform) > 1:
+            raise IngestError(
+                f"segment {segment} mixes channels, sampling, labels or split: {sorted(uniform)}"
+            )
+        segments.append(
+            LabelledSegment(
+                id=segment,
+                channel=first.channel,
+                sampling_s=first.sampling_s,
+                anomaly=first.anomaly,
+                train=first.train,
+                start=first.mission_ts,
+                end=members[-1].mission_ts,
+                samples=len(members),
+            )
+        )
+    return sorted(segments, key=lambda seg: (seg.channel, seg.start))
 
 
 def _measurement(

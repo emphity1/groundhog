@@ -22,9 +22,15 @@ from groundhog.detectors.r0_limits import (
     nominal_envelope,
 )
 from groundhog.ingest import IngestError
-from groundhog.ingest.opssat import OpssatSourceConfig, nominal_values
+from groundhog.ingest.opssat import (
+    OpssatSourceConfig,
+    labelled_samples,
+    labelled_segments,
+    nominal_values,
+)
 from groundhog.schema import ChannelKind
 from replay_doubles import write_replay_config
+from synthetic_opssat import HEADER
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "derive_limits.py"
@@ -86,7 +92,7 @@ class TestNominalValues:
         self, opssat_config: OpssatSourceConfig
     ) -> None:
         # CH_C's only segment is labelled anomalous; the window ends before 23:00.
-        values = nominal_values(opssat_config.path, None, BEFORE_THE_GAP)
+        values = nominal_values(labelled_samples(opssat_config.path), None, BEFORE_THE_GAP)
         assert values == {
             "CH_A": [1.0, 1.01, 1.02, 1.03, 1.04],
             "CH_B": [2.0, 2.01, 2.02, 2.03, 2.04],
@@ -95,13 +101,62 @@ class TestNominalValues:
     def test_start_is_inclusive_and_end_exclusive(self, opssat_config: OpssatSourceConfig) -> None:
         start = datetime(2022, 1, 4, 20, 0, 1, tzinfo=UTC)
         end = datetime(2022, 1, 4, 20, 0, 3, tzinfo=UTC)
-        assert nominal_values(opssat_config.path, start, end)["CH_A"] == [1.01, 1.02]
+        samples = labelled_samples(opssat_config.path)
+        assert nominal_values(samples, start, end)["CH_A"] == [1.01, 1.02]
 
-    def test_a_label_other_than_zero_or_one_is_refused(self, tmp_path: Path) -> None:
+    def test_only_the_official_training_segments_on_request(
+        self, opssat_config: OpssatSourceConfig
+    ) -> None:
+        # CH_A: segment 7 (train) at 20:00, segment 1 (test) at 23:00.
+        samples = labelled_samples(opssat_config.path)
+        official = nominal_values(samples, None, None, official_train=True)
+        assert official["CH_A"] == [1.0, 1.01, 1.02, 1.03, 1.04]
+        assert nominal_values(samples, None, None)["CH_A"] == [*official["CH_A"], 1.1, 1.11, 1.12]
+
+
+class TestLabelledData:
+    def test_segments_run_from_their_first_to_their_last_sample(
+        self, opssat_config: OpssatSourceConfig
+    ) -> None:
+        segments = labelled_segments(labelled_samples(opssat_config.path))
+        assert [(s.channel, s.id) for s in segments] == [
+            ("CH_A", 7),
+            ("CH_A", 1),
+            ("CH_B", 2),
+            ("CH_B", 9),
+            ("CH_C", 5),
+        ]
+        ch_c = segments[-1]
+        assert (ch_c.sampling_s, ch_c.anomaly, ch_c.train, ch_c.samples) == (5, True, True, 6)
+        assert (ch_c.start, ch_c.end) == (
+            datetime(2022, 1, 4, 20, 0, 2, tzinfo=UTC),
+            datetime(2022, 1, 4, 20, 2, 25, tzinfo=UTC),
+        )
+
+    @pytest.mark.parametrize(
+        ("row", "complaint"),
+        [
+            ("A,2022-01-04T20:00:00Z,1,anomaly,5,x,3,1", "neither 0 nor 1"),
+            ("A,2022-01-04T20:00:00Z,1,anomaly,5,0,3,2", "neither 0 nor 1"),
+            ("A,2022-01-04T20:00:00Z,1,anomaly,0,0,3,1", "positive integer"),
+            ("A,2022-01-04T20:00:00Z,1,anomaly,5,0,-3,1", "positive integer"),
+        ],
+    )
+    def test_malformed_labels_are_refused(self, tmp_path: Path, row: str, complaint: str) -> None:
         path = tmp_path / "segments.csv"
-        path.write_text("channel,timestamp,value,anomaly\nA,2022-01-04T20:00:00Z,1,x\n")
-        with pytest.raises(IngestError, match="neither 0 nor 1"):
-            nominal_values(path, None, None)
+        path.write_text(HEADER + row + "\n", encoding="utf-8")
+        with pytest.raises(IngestError, match=complaint):
+            labelled_samples(path)
+
+    def test_a_segment_mixing_labels_is_refused(self, tmp_path: Path) -> None:
+        path = tmp_path / "segments.csv"
+        rows = [
+            "A,2022-01-04T20:00:00Z,1,anomaly,5,0,3,1",
+            "A,2022-01-04T20:00:05Z,1,anomaly,5,1,3,1",
+        ]
+        path.write_text(HEADER + "\n".join(rows) + "\n", encoding="utf-8")
+        with pytest.raises(IngestError, match="segment 3 mixes"):
+            labelled_segments(labelled_samples(path))
 
 
 class TestScript:
