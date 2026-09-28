@@ -23,6 +23,19 @@ Annotated telemetry from ESA's OPS-SAT CubeSat, with segments and derived featur
 - Licence: **CC BY 4.0**
 - Attribution: credit the European Space Agency and the dataset authors as listed on the Zenodo record; cite the Scientific Data paper in any published result.
 
+What the files actually contain (checked against the fetched files, 2026-09-28):
+
+- **`segments.csv`** (19 MB, 303,493 rows): the telemetry, one sample per row, columns `channel, timestamp, value, label, sampling, anomaly, segment, train`. No missing values, no duplicate `(channel, timestamp)`.
+  - `channel`: nine opaque ids, `CADC0872` to `CADC0894`. No units anywhere in the files. `CADC0872/0873/0874` stay within ±1e-4, magnitudes consistent with a magnetometer in tesla (unconfirmed); the other six range from 0 to 1.5708.
+  - `timestamp`: ISO 8601 in UTC, e.g. `2022-06-01T23:42:54.000Z`; the milliseconds are always zero.
+  - `sampling`: 1 or 5 seconds, set per segment, not per channel. The 1 s segments are perfectly regular. The 5 s segments carry ±1–2 s jitter and 36 internal gaps of 15–130 s.
+  - `anomaly` (0/1) is the label, one per segment: 434 of 2,123 segments, a third of the samples. There is no position inside a segment and no rare-nominal class. **`label` is the constant string `anomaly` on every row, normal ones included, and carries no information.**
+  - `segment` ids do not follow time. `train` is the official split, see below.
+- **`dataset.csv`** (2,123 rows × 23 columns): per-segment statistics computed by the authors' `dataset_generator.ipynb`. This is derived data. Groundhog computes its own features with its preprocessing module and uses this file at most as a cross-check.
+- **Coverage.** The data spans 4 January to 2 June 2022, but each channel covers only 0.4–1.2 % of that span: January, early February and the night of 1–2 June, with a 125-day hole in between. The segments are back-to-back windows cut from 243 continuous runs (typically ~12 minutes, the longest 14.5 hours), separated by 234 gaps lasting from seconds to months. Channels are sampled at the same instants (86–99 % shared timestamps), but segment boundaries never coincide across channels.
+- **Official split.** `train` marks 1,594 segments for training and 529 for testing. It is stratified by label but not chronological: the two sets interleave over the whole period, and adjacent windows of one run often land on opposite sides. See [ADR 0001](docs/adr/0001-opssat-train-test-split.md).
+- **Licence discrepancy.** The record's metadata declares CC BY 4.0, while the `LICENSE` file shipped inside the record is an MIT licence (KP Labs, 2024). Follow the attribution above until the authors clarify.
+
 ### `esa_adb` — ESA Anomaly Dataset
 
 176 channels from two ESA missions across 17.5 years, with 844 events annotated by spacecraft operations engineers: 148 anomalies, 690 rare nominal events, 4 communication gaps. The primary dataset and the benchmark Groundhog reports against.
