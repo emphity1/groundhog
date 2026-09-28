@@ -42,6 +42,7 @@ __all__ = [
     "StatesCheck",
     "derive_limits",
     "load_limits",
+    "lookback_s",
     "nominal_envelope",
 ]
 
@@ -166,6 +167,17 @@ class LimitChecker:
         }
         self._state: dict[tuple[str, str], _ChannelState] = {}
         self._hash = config_sha256(config)
+        self._lookback = max(
+            (
+                lookback_s(
+                    self._policies[name],
+                    rate_limited=isinstance(check, LimitsCheck) and check.max_rate is not None,
+                )
+                for name, check in config.channels.items()
+                if not isinstance(check, NoCheck)
+            ),
+            default=0.0,
+        )
 
     @property
     def id(self) -> DetectorId:
@@ -178,6 +190,10 @@ class LimitChecker:
     @property
     def config_hash(self) -> str:
         return self._hash
+
+    @property
+    def lookback_s(self) -> float:
+        return self._lookback
 
     def reset(self) -> None:
         self._state.clear()
@@ -296,6 +312,22 @@ def _advance(
         state.run_start, state.run_samples = None, 0
         if state.onset is not None and back_inside:
             state.onset = None
+
+
+def lookback_s(policy: AlarmPolicy, rate_limited: bool) -> float:
+    """How far back, in mission time, R0's decision to fire can reach under ``policy``.
+
+    Consecutive samples of a violation are at most ``max_gap_s`` apart: a longer
+    silence resets the channel. Persistence over N samples therefore spans at most
+    N - 1 such steps. Persistence over T seconds fires at the first sample at least
+    T after the violation began, which the step before it had not reached: less
+    than T + ``max_gap_s``. A rate limit reads the sample before the violation too.
+    """
+    if isinstance(policy.persistence, PersistenceSamples):
+        span = (policy.persistence.samples - 1) * policy.max_gap_s
+    else:
+        span = policy.persistence.seconds + policy.max_gap_s
+    return span + (policy.max_gap_s if rate_limited else 0.0)
 
 
 def _persisted(

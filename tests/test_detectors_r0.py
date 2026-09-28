@@ -273,3 +273,35 @@ class TestConfiguration:
         r0 = LimitChecker(limits({"A": quick, "B": LIMITS}, persistence={"samples": 3}))
         scores = run(r0, every_second("A", [11]) + every_second("B", [11]))
         assert firing(scores) == [True, False]
+
+
+class TestLookback:
+    """How far back a decision to fire can reach: a term of the embargo (ADR 0001)."""
+
+    def test_persistence_over_samples_spans_the_steps_between_them(self) -> None:
+        r0 = LimitChecker(limits({"A": LIMITS}, persistence={"samples": 3}, max_gap_s=60))
+        assert r0.lookback_s == 120
+        # Reached: three violating samples 60 s apart fire on the third.
+        scores = run(r0, samples("A", [(0, 11), (60, 11), (120, 11)]))
+        assert firing(scores) == [False, False, True]
+        assert onsets(scores) == {T0}
+
+    def test_persistence_over_seconds_can_overshoot_by_one_step(self) -> None:
+        r0 = LimitChecker(limits({"A": LIMITS}, persistence={"seconds": 30}, max_gap_s=60))
+        assert r0.lookback_s == 90
+        # Approached: at 29 s the violation has not lasted 30 s, at 89 s it has.
+        scores = run(r0, samples("A", [(0, 11), (29, 11), (89, 11)]))
+        assert firing(scores) == [False, False, True]
+        assert onsets(scores) == {T0}
+
+    def test_a_rate_limit_reads_one_sample_more(self) -> None:
+        rated = LIMITS | {"max_rate": 1.0}
+        r0 = LimitChecker(limits({"A": LIMITS, "B": rated}, persistence={"samples": 3}))
+        assert r0.lookback_s == 180
+
+    def test_the_longest_channel_sets_it(self) -> None:
+        slow = LIMITS | {"persistence": {"samples": 5}}
+        unchecked = {"check": "none", "reason": "for a test"}
+        r0 = LimitChecker(limits({"A": LIMITS, "B": slow, "C": unchecked}, max_gap_s=10))
+        assert r0.lookback_s == 40
+        assert LimitChecker(limits({"C": unchecked})).lookback_s == 0

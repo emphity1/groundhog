@@ -47,6 +47,13 @@ class Detector(Protocol):
         """SHA-256 of everything that determines the scores, for the run header."""
         ...
 
+    @property
+    def lookback_s(self) -> float:
+        """The longest stretch of mission time, before a sample, that the decision to
+        fire on it can depend on. Part of the embargo between a training period and
+        the test period after it (ADR 0001)."""
+        ...
+
     def update(self, sample: Sample) -> Score | None:
         """Answer the next sample of the stream: a score, or None for no opinion."""
         ...
