@@ -1,0 +1,44 @@
+# Replay OPSSAT-AD as a live stream: samples as JSON lines on stdout, logs on stderr.
+#
+#   python -m groundhog.replay --config configs/replay/opssat.yaml     (or: make replay)
+#
+# Every key is required; there are no defaults in code. Paths are relative to the
+# directory the replay runs from, the repository root.
+
+source:
+  type: opssat
+  path: data/raw/opssat/segments.csv   # make data-fetch DS=opssat
+  mission: opssat
+  # The files carry neither units nor channel types. All nine channels are continuous
+  # measurements; units stay null until confirmed against the dataset paper.
+  channels:
+    CADC0872: {kind: numeric, unit: null}
+    CADC0873: {kind: numeric, unit: null}
+    CADC0874: {kind: numeric, unit: null}
+    CADC0884: {kind: numeric, unit: null}
+    CADC0886: {kind: numeric, unit: null}
+    CADC0888: {kind: numeric, unit: null}
+    CADC0890: {kind: numeric, unit: null}
+    CADC0892: {kind: numeric, unit: null}
+    CADC0894: {kind: numeric, unit: null}
+
+replay:
+  # Mission seconds per wall second. At 1000x the whole dataset takes about 3 h 34 min,
+  # most of it the silence between February and June. The stream starts at the window
+  # start, silence included: start: 2022-06-01T23:39:00Z replays the night of 1-2 June
+  # in about 56 s.
+  speed: 1000
+  seed: 0              # orders channels whose samples share a mission_ts (ADR 0003)
+  window:              # mission time, UTC: start inclusive, end exclusive, null for open
+    start: null
+    end: null
+  max_sleep_s: 0.25    # a stop request (Ctrl+C, SIGTERM) is noticed within this
+
+# Checkpoints are exact on a graceful stop, at least once after a crash (ADR 0004).
+checkpoint:
+  path: data/replay/opssat.checkpoint.json
+  every_samples: 10000 # at most this many duplicates after a crash
+  min_idle_s: 1.0      # a wait this long is a pause on a gap: checkpoint first
+
+sink:
+  type: jsonl_stdout

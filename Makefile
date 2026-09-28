@@ -3,6 +3,7 @@
 # runs them with the sh.exe that Git Bash puts on PATH instead.
 SHELL := /bin/bash
 DS ?= opssat
+REPLAY_CONFIG ?= configs/replay/opssat.yaml
 
 # Without any sh.exe on PATH, make for Windows falls back to cmd.exe.
 ifeq ($(SHELL),sh.exe)
@@ -75,10 +76,11 @@ data-list: $(ENV) ## Show the dataset registry
 data-fetch: $(ENV) ## Download a dataset: make data-fetch DS=opssat
 	$(PY) scripts/fetch_data.py $(DS)
 
-# --- not implemented yet: see the roadmap in README.md ---
+# Silent recipe: stdout is the stream, and make's echo of the command would corrupt it.
+replay: $(ENV) ## Replay a mission window as JSON lines on stdout [REPLAY_ARGS=--restart]
+	@$(PY) -m groundhog.replay --config $(REPLAY_CONFIG) $(REPLAY_ARGS)
 
-replay: ## [M1] Replay a mission window as a live stream
-	@echo "not implemented yet - milestone M1"; exit 1
+# --- not implemented yet: see the roadmap in README.md ---
 
 train: ## [M5] Train a detector from a config file
 	@echo "not implemented yet - milestone M5"; exit 1

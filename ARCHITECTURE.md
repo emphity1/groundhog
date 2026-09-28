@@ -70,11 +70,13 @@ MinIO with Parquet files, three zones:
 
 Versioned with DVC so every model traces back to the exact data that produced it. Datasets are never committed to git.
 
-### 4.2 Ingest and normalisation *(planned)*
+### 4.2 Ingest and normalisation *(OPSSAT-AD in M1, other sources planned)*
 
-One adapter per source (ESA-ADB, OPSSAT-AD, Mars Express, SatNOGS), all emitting the common sample schema. Handles unit calibration, categorical channels and quality flags.
+One adapter per source (ESA-ADB, OPSSAT-AD, Mars Express, SatNOGS), all emitting the common sample schema as readings. Handles unit calibration, categorical channels and quality flags.
 
-### 4.3 Replay engine *(planned)*
+Implemented in `groundhog.ingest`: the `Source` interface and the OPSSAT-AD adapter. Kind and unit of every channel are declared in configuration, since guessing them is not acceptable, and labels never reach a reading.
+
+### 4.3 Replay engine *(M1)*
 
 The backbone. Reads a normalised mission window and publishes it to the bus as if it were arriving now.
 
@@ -86,6 +88,8 @@ Requirements:
 - **Sampling fidelity.** Irregular and varying sample rates are reproduced as recorded.
 - **Determinism.** Same window, same seed, same config ⇒ identical stream ordering. Without this there is no benchmark.
 - **Checkpoint and resume.** A 17-year replay is not restarted because a pod was evicted.
+
+Implemented in `groundhog.replay` (`python -m groundhog.replay --config configs/replay/opssat.yaml`). The clock, the sink and the checkpoint store are injected interfaces; M1 writes JSON lines to stdout and keeps its checkpoint in a local JSON file. Ordering and the role of the seed are recorded in [ADR 0003](docs/adr/0003-replay-ordering-and-seed.md), delivery guarantees in [ADR 0004](docs/adr/0004-replay-delivery-and-checkpoints.md).
 
 ### 4.4 Stream transport *(planned)*
 
