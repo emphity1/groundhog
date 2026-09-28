@@ -6,6 +6,13 @@
 *.h5
 *.hdf5
 
+# Secrets: configuration comes from the environment, never from committed files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 # Model artefacts and experiment tracking
 mlruns/
 models/
@@ -19,7 +26,6 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-.env
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
