@@ -65,7 +65,7 @@ flowchart LR
 MinIO with Parquet files, three zones:
 
 - `raw/` — exactly as downloaded, never modified, checksummed.
-- `normalized/` — the common schema (§5.1), partitioned by `mission / channel / month`.
+- `normalized/` — the common schema (§5.1) as readings, partitioned by `mission / channel / month`.
 - `features/` — windowed, scaled tensors ready for training.
 
 Versioned with DVC so every model traces back to the exact data that produced it. Datasets are never committed to git.
@@ -192,6 +192,8 @@ One command replays a defined window, runs the configured detectors, and produce
 | `quality` | enum | `ok` · `stale` · `gap_filled` · `suspect` |
 
 `kind` exists because averaging a status flag is meaningless. Mixing categorical and numeric channels in the same pipeline without distinguishing them is a common and silent error.
+
+Before publication a sample is a **reading**: the same fields without `wall_ts`. Source adapters and the data lake deal in readings. The replay engine, or a live feed, turns a reading into a sample at the moment it publishes it ([ADR 0002](docs/adr/0002-readings-before-publication.md)).
 
 ### 5.2 Event
 

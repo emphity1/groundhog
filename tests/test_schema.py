@@ -15,6 +15,7 @@ from groundhog.schema import (
     DetectorId,
     Event,
     Quality,
+    Reading,
     Sample,
 )
 
@@ -32,6 +33,18 @@ def make_sample(**overrides: object) -> Sample:
         "unit": "V",
     }
     return Sample(**(defaults | overrides))  # type: ignore[arg-type]
+
+
+def make_reading(**overrides: object) -> Reading:
+    defaults: dict[str, object] = {
+        "mission": "esa_adb/mission1",
+        "channel": "TM_EPS_BATT_V",
+        "mission_ts": T0,
+        "value": 27.9,
+        "kind": ChannelKind.NUMERIC,
+        "unit": "V",
+    }
+    return Reading(**(defaults | overrides))  # type: ignore[arg-type]
 
 
 def make_event(**overrides: object) -> Event:
@@ -85,6 +98,43 @@ class TestSample:
 
     def test_quality_defaults_to_ok(self) -> None:
         assert make_sample().quality is Quality.OK
+
+
+class TestReading:
+    def test_is_exactly_a_sample_without_wall_ts(self) -> None:
+        # Two types share these fields; they must not drift apart.
+        expected = {name: f for name, f in Sample.model_fields.items() if name != "wall_ts"}
+        assert Reading.model_fields.keys() == expected.keys()
+        for name, field in Reading.model_fields.items():
+            other = expected[name]
+            assert field.annotation == other.annotation, name
+            assert field.default == other.default, name
+            assert field.description == other.description, name
+            assert field.metadata == other.metadata, name
+
+    def test_publish_adds_wall_ts_and_nothing_else(self) -> None:
+        reading = make_reading(quality=Quality.SUSPECT)
+        wall = T0 + timedelta(hours=1)
+        sample = reading.publish(wall)
+        assert isinstance(sample, Sample)
+        assert sample.wall_ts == wall
+        assert sample.model_dump(exclude={"wall_ts"}) == reading.model_dump()
+
+    def test_publish_rejects_naive_wall_ts(self) -> None:
+        with pytest.raises(ValidationError, match="timezone-aware"):
+            make_reading().publish(datetime(2026, 3, 1, 5, 0))
+
+    def test_naive_mission_ts_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="timezone-aware"):
+            make_reading(mission_ts=datetime(2026, 3, 1, 4, 12))
+
+    def test_has_no_wall_ts(self) -> None:
+        with pytest.raises(ValidationError):
+            make_reading(wall_ts=T0)
+
+    def test_is_frozen(self) -> None:
+        with pytest.raises(ValidationError):
+            make_reading().value = 1.0  # type: ignore[misc]
 
 
 class TestEvent:

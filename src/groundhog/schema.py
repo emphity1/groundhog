@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Core data contracts for Groundhog.
 
-Everything in the system speaks these two types. A :class:`Sample` is one
-telemetry measurement; an :class:`Event` is an anomaly candidate as the operator
-sees it. Source adapters produce samples, detectors consume them, the arbiter
+Everything in the system speaks these types. A :class:`Sample` is one telemetry
+measurement; an :class:`Event` is an anomaly candidate as the operator sees it.
+Source adapters produce readings, a publisher (the replay engine, or a live feed)
+turns each :class:`Reading` into a sample, detectors consume samples, the arbiter
 produces events.
 
 Two conventions that the rest of the codebase depends on:
@@ -33,6 +34,7 @@ __all__ = [
     "EventStatus",
     "OrbitalContext",
     "Quality",
+    "Reading",
     "Sample",
     "Severity",
     "Verdict",
@@ -99,6 +101,31 @@ class Sample(BaseModel):
     def key(self) -> str:
         """Partition key on the bus: samples of one channel stay ordered."""
         return f"{self.mission}/{self.channel}"
+
+
+class Reading(BaseModel):
+    """A sample as an archive holds it: every field except the publication time.
+
+    Source adapters and the data lake deal in readings, because ``wall_ts`` does
+    not exist until something publishes the value. :meth:`publish` is the only way
+    a reading becomes a :class:`Sample`. See docs/adr/0002-readings-before-publication.md.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mission: str = Field(min_length=1, description="Dataset or spacecraft identifier")
+    channel: str = Field(min_length=1, description="Channel id, e.g. TM_EPS_BATT_V")
+    mission_ts: datetime = Field(description="When the spacecraft measured it (UTC)")
+    value: float = Field(description="Calibrated value; categorical channels carry their code")
+    kind: ChannelKind = ChannelKind.NUMERIC
+    unit: str | None = Field(default=None, description="Engineering unit, when known")
+    quality: Quality = Quality.OK
+
+    _utc = field_validator("mission_ts")(_require_utc)
+
+    def publish(self, wall_ts: datetime) -> Sample:
+        """The sample this reading becomes when it is published at ``wall_ts``."""
+        return Sample(wall_ts=wall_ts, **self.model_dump())
 
 
 class Severity(StrEnum):
