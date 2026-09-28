@@ -5,8 +5,9 @@ Samples go to stdout as JSON lines, logs to stderr. Ctrl+C or SIGTERM stops
 gracefully and leaves a checkpoint that the next run resumes from; a second Ctrl+C
 stops at once.
 
-Exit status: 0 complete, 130 stopped early (resumable), 1 output not writable
-(usually: its reader went away), 2 unusable configuration, data or checkpoint.
+Exit status (``groundhog.cli``): 0 complete, 130 stopped early (resumable), 1 output
+not writable (usually: its reader went away), 2 unusable configuration, data or
+checkpoint.
 """
 
 from __future__ import annotations
@@ -14,16 +15,22 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
-import signal
 import sys
 import threading
 from pathlib import Path
-from types import FrameType
 
 import yaml
 from pydantic import ValidationError
 
+from groundhog.cli import (
+    EXIT_OK,
+    EXIT_OUTPUT_CLOSED,
+    EXIT_STOPPED,
+    EXIT_UNUSABLE_INPUT,
+    log_to_stderr,
+    silence_stdout,
+    stop_on_signals,
+)
 from groundhog.ingest import IngestError
 from groundhog.ingest.opssat import OpssatSource
 from groundhog.replay.checkpoint import CheckpointError, JsonFileCheckpointStore
@@ -33,10 +40,6 @@ from groundhog.replay.engine import ReplayEngine
 from groundhog.replay.sinks import JsonlSink, SinkError
 
 log = logging.getLogger("groundhog.replay")
-
-EXIT_OUTPUT_CLOSED = 1
-EXIT_UNUSABLE_INPUT = 2
-EXIT_STOPPED = 130
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -53,9 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         help="discard the checkpoint of an unfinished replay and start from the beginning",
     )
     args = parser.parse_args(argv)
-    logging.basicConfig(
-        stream=sys.stderr, level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-    )
+    log_to_stderr()
 
     try:
         config = load_config(args.config)
@@ -79,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("config %s; source %s", args.config, json.dumps(source.describe(), sort_keys=True))
 
     stop = threading.Event()
-    _stop_on_signals(stop)
+    stop_on_signals(stop)
     try:
         result = engine.run(stop)
         sink.close()
@@ -87,30 +88,13 @@ def main(argv: list[str] | None = None) -> int:
         log.error("checkpoint %s: %s; pass --restart to start over", store.path, exc)
         return EXIT_UNUSABLE_INPUT
     except SinkError as exc:
-        # Usually the reader went away. Point stdout at devnull so that the
-        # interpreter's final flush does not fail a second time.
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        silence_stdout()
         log.warning("%s; the checkpoint stays at its last save", exc)
         return EXIT_OUTPUT_CLOSED
     except KeyboardInterrupt:
         log.warning("interrupted twice: stopped at once, the checkpoint stays at its last save")
         return EXIT_STOPPED
-    return 0 if result.completed else EXIT_STOPPED
-
-
-def _stop_on_signals(stop: threading.Event) -> None:
-    """First Ctrl+C or SIGTERM: stop gracefully. A second one: the default, at once."""
-
-    def graceful(signum: int, frame: FrameType | None) -> None:
-        stop.set()
-        signal.signal(
-            signum, signal.default_int_handler if signum == signal.SIGINT else signal.SIG_DFL
-        )
-
-    for name in ("SIGINT", "SIGTERM", "SIGBREAK"):  # SIGBREAK: Ctrl+Break, Windows only
-        signum = getattr(signal, name, None)
-        if signum is not None:
-            signal.signal(signum, graceful)
+    return EXIT_OK if result.completed else EXIT_STOPPED
 
 
 if __name__ == "__main__":

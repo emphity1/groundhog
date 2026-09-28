@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from typing import BinaryIO, Protocol
 
+from groundhog.jsonlines import JsonLinesWriter, OutputError
 from groundhog.schema import Sample
 
 __all__ = ["JsonlSink", "Sink", "SinkError"]
 
-
-class SinkError(Exception):
-    """The sink cannot deliver: its reader went away, or its medium failed."""
+SinkError = OutputError
+"""The sink cannot deliver: its reader went away, or its medium failed."""
 
 
 class Sink(Protocol):
@@ -32,21 +32,14 @@ class JsonlSink:
     """One sample per line as JSON: UTF-8, LF-terminated on every platform."""
 
     def __init__(self, stream: BinaryIO) -> None:
-        self._stream = stream
+        self._out = JsonLinesWriter(stream)
 
     def write(self, sample: Sample) -> None:
-        try:
-            self._stream.write(sample.model_dump_json().encode() + b"\n")
-        except OSError as exc:
-            raise SinkError(f"cannot write the stream: {exc}") from exc
+        self._out.write(sample)
 
     def flush(self) -> None:
-        # A reader that has gone away shows up as EPIPE on POSIX and EINVAL on Windows.
-        try:
-            self._stream.flush()
-        except OSError as exc:
-            raise SinkError(f"cannot write the stream: {exc}") from exc
+        self._out.flush()
 
     def close(self) -> None:
         # The stream belongs to the caller (stdout, usually): flush it, never close it.
-        self.flush()
+        self._out.flush()

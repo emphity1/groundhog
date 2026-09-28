@@ -11,7 +11,6 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
@@ -22,29 +21,8 @@ from groundhog.replay.config import load_config
 from groundhog.replay.engine import ReplayEngine
 from groundhog.schema import Sample
 from replay_doubles import FakeClock, MemorySink
+from replay_doubles import write_replay_config as write_config
 from synthetic_opssat import TOTAL
-
-
-def write_config(tmp_path: Path, source: OpssatSourceConfig, **replay: Any) -> Path:
-    tree = {
-        "source": source.model_dump(mode="json"),
-        "replay": {
-            "speed": 1e9,
-            "seed": 0,
-            "window": {"start": None, "end": None},
-            "max_sleep_s": 0.25,
-        }
-        | replay,
-        "checkpoint": {
-            "path": str(tmp_path / "state" / "replay.json"),
-            "every_samples": 5,
-            "min_idle_s": 1.0,
-        },
-        "sink": {"type": "jsonl_stdout"},
-    }
-    path = tmp_path / "replay.yaml"
-    path.write_text(yaml.safe_dump(tree), encoding="utf-8")
-    return path
 
 
 def cli(*args: str | Path) -> subprocess.CompletedProcess[str]:

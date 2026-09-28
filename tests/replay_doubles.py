@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
+import yaml
+
+from groundhog.ingest.opssat import OpssatSourceConfig
 from groundhog.replay.checkpoint import Checkpoint
 from groundhog.schema import Sample
 
@@ -86,3 +91,27 @@ class MemoryStore:
 
     def clear(self) -> None:
         self.checkpoint = None
+
+
+def write_replay_config(tmp_path: Path, source: OpssatSourceConfig, **replay: Any) -> Path:
+    """A replay configuration at 1e9x over ``source``: the synthetic three-hour gap
+    lasts about 11 microseconds of wall time."""
+    tree = {
+        "source": source.model_dump(mode="json"),
+        "replay": {
+            "speed": 1e9,
+            "seed": 0,
+            "window": {"start": None, "end": None},
+            "max_sleep_s": 0.25,
+        }
+        | replay,
+        "checkpoint": {
+            "path": str(tmp_path / "state" / "replay.json"),
+            "every_samples": 5,
+            "min_idle_s": 1.0,
+        },
+        "sink": {"type": "jsonl_stdout"},
+    }
+    path = tmp_path / "replay.yaml"
+    path.write_text(yaml.safe_dump(tree), encoding="utf-8")
+    return path
