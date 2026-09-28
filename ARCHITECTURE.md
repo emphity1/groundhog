@@ -112,9 +112,11 @@ Two rules that are not negotiable:
 - **Scalers are fitted on the training period only.** Normalising with statistics computed over the whole dataset leaks future information and inflates every metric downstream.
 - **Gaps are not silently interpolated.** Short gaps may be filled per channel configuration; long gaps propagate a quality flag all the way to the event.
 
-### 4.7 Detectors *(planned)*
+### 4.7 Detectors *(R0 in M3, the others planned)*
 
 All implement the same interface: samples in, scores out.
+
+The interface is `groundhog.detectors.base.Detector` ([ADR 0005](docs/adr/0005-detector-scores.md)). One sample goes in and a `Score` comes out, or nothing, which means no opinion. The detector keeps its state per channel and never sees a later sample. The score's value is internal to the detector that produced it. R0 lives in `groundhog.detectors.r0_limits`, configured in `configs/limits/`. For datasets without operational limits, its limits come from the nominal training envelope ([ADR 0007](docs/adr/0007-r0-limits-from-nominal-envelope.md)).
 
 | Id | Detector | Approach | Cost | Catches |
 |---|---|---|---|---|
@@ -126,9 +128,11 @@ All implement the same interface: samples in, scores out.
 
 R1 is mandatory and reported alongside every model. A neural detector that does not beat it is a finding, not a failure.
 
-### 4.8 Arbiter *(planned)*
+### 4.8 Arbiter *(minimal version in M3)*
 
 Consumes scores from all detectors and produces events: grouping consecutive flagged samples, fusing detectors that fire on the same window, deduplicating, suppressing repeats of a known ongoing event, assigning severity. Without this layer the operator receives a thousand notifications instead of ten events.
+
+M3's version, `groundhog.arbiter`, groups the consecutive firing scores of one detector on one channel into an event and takes severity from bands set per detector. Every change of an event is published as a record under the same id ([ADR 0006](docs/adr/0006-event-stream.md)). `python -m groundhog.detect` runs a detector and the arbiter on the replay's output: `replay | detect`, with no bus. Fusion across detectors and suppression of repeats come in M5, through its `EventHook`.
 
 ### 4.9 Context enrichment *(planned)*
 
@@ -212,6 +216,22 @@ Before publication a sample is a **reading**: the same fields without `wall_ts`.
 | `status` | `new` · `triage` · `closed` |
 | `verdict` | `confirmed` · `false_positive` · null |
 | `model_versions[]` | For traceability |
+
+An event is published as a sequence of records under one id: when it opens, when its severity rises, and when it closes. The last record is the event ([ADR 0006](docs/adr/0006-event-stream.md)).
+
+### 5.3 Score
+
+What a detector answers for one sample ([ADR 0005](docs/adr/0005-detector-scores.md)). No opinion is no score at all, never a zero.
+
+| Field | Notes |
+|---|---|
+| `detector`, `mission`, `channel`, `mission_ts` | The sample scored, on mission time |
+| `value` | ≥ 0; 0 means evaluated and nominal. Internal to its detector: not comparable across detectors without a calibration |
+| `firing` | The detector's own alarm decision, after its persistence and hysteresis |
+| `onset` | Mission time at which the alarm condition began; null unless firing |
+| `quality` | The worst quality among the samples the score used |
+
+Thresholds are not in the score: the detector's configuration hash appears once, in the run header. Severity is not in the score either: the arbiter assigns it.
 
 ## 6. The journey of one sample
 

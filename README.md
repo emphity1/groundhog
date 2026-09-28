@@ -70,15 +70,16 @@ The statistical baseline is not a formality. If a moving average with an adaptiv
 
 ## Running it
 
-The replay engine runs today, on the development dataset:
+Replay and limit checking run today, on the development dataset:
 
 ```bash
 make setup                   # uv if installed, otherwise a virtualenv with pip
 make data-fetch DS=opssat    # ~20 MB, checksums verified
 make replay                  # OPSSAT-AD as a live stream, 1000x real time
+make replay | make detect    # R0 limit checking on that stream: events as JSON lines
 ```
 
-`make replay` writes samples to stdout as JSON lines and logs to stderr. Ctrl+C leaves a checkpoint that the next run resumes from. The other entry points arrive with their milestones:
+`make replay` writes samples to stdout as JSON lines and logs to stderr. Ctrl+C leaves a checkpoint that the next run resumes from. `make detect` reads those samples on stdin and writes a run header, then events, as JSON lines. Its limits come from `make limits`, which derives them from nominal training data because OPSSAT-AD ships none. The other entry points arrive with their milestones:
 
 ```bash
 make dev-up        # k3s + Redpanda + TimescaleDB + MinIO, locally
@@ -89,7 +90,7 @@ make evaluate      # reproducible benchmark run, produces the metrics table
 
 - [x] **M0** — repository skeleton, data schema, dataset download scripts
 - [x] **M1** — replay engine with gap fidelity and deterministic output: same data, window and seed give the same stream
-- [ ] **M3** — limit checking end to end on files and pipes (`replay | detect`, no bus, no database)
+- [x] **M3** — limit checking end to end on files and pipes (`replay | detect`, no bus, no database)
 - [ ] **M4** — evaluation harness and the first metrics on real data
 - [ ] **M2** — ingest, stream transport, hot and cold storage
 - [ ] **M5** — statistical baseline, then the ML detectors
