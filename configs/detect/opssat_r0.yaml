@@ -1,0 +1,19 @@
+# R0 limit checking over a stream of samples: JSON lines in on stdin, events out on stdout.
+#
+#   python -m groundhog.replay --config configs/replay/opssat.yaml |
+#     python -m groundhog.detect --config configs/detect/opssat_r0.yaml      (or: make replay | make detect)
+#
+# Every key is required. Paths are relative to the repository root.
+
+detector:
+  type: r0_limits
+  limits: configs/limits/opssat.yaml   # the nominal training envelope, derived by: make limits
+
+arbiter:
+  # Peak score at which an event becomes medium, then high severity, set per detector:
+  # scores are not comparable across detectors (ADR 0005). R0's score is how far outside
+  # its limits a value lies, in units of the limit span. Starting values, weighed in M4.
+  severity:
+    r0_limits: {medium: 0.1, high: 0.5}
+
+max_wait_s: 0.25                       # a stop request (Ctrl+C, SIGTERM) is noticed within this
