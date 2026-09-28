@@ -1,0 +1,34 @@
+# Dataset registry. Nothing here is committed to git as data — only how to get it.
+# Checksums are not hard-coded: the fetcher reads them from the source's own API
+# and records what it downloaded in data/datasets.lock.json.
+
+datasets:
+  opssat:
+    title: OPSSAT-AD — anomaly detection dataset for satellite telemetry
+    source: zenodo
+    record_id: "15108715"
+    doi: 10.5281/zenodo.15108715
+    licence: CC-BY-4.0
+    approx_size: 20 MB
+    role: development dataset — fast iteration loop
+    files: [segments.csv, dataset.csv]
+
+  esa_adb:
+    title: ESA Anomaly Dataset (ESA-ADB)
+    source: zenodo
+    record_id: "12528696"
+    doi: 10.5281/zenodo.12528696
+    licence: CC-BY-3.0-IGO
+    approx_size: 11.6 GB
+    role: primary dataset and benchmark
+    files: [ESA-Mission1.zip, ESA-Mission2.zip]
+
+  mars_express:
+    title: Mars Express Power Challenge dataset
+    source: zenodo
+    record_id: "6327379"
+    doi: 10.5281/zenodo.6327379
+    licence: CC-BY-4.0
+    approx_size: 154 MB compressed
+    role: second use case — power forecasting
+    files: [mars-express-power-3years.zip]

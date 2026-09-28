@@ -1,0 +1,44 @@
+# Datasets and derived data — never committed, always fetched
+**/data/*
+!/data/.gitkeep
+*.parquet
+*.zip
+*.h5
+*.hdf5
+
+# Model artefacts and experiment tracking
+mlruns/
+models/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# DVC
+/.dvc/cache
+/.dvc/tmp
+
+# Console front end
+console/node_modules/
+console/dist/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

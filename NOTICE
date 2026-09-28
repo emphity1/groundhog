@@ -1,0 +1,43 @@
+Groundhog
+Copyright 2026 The Groundhog authors
+
+This product includes software developed as part of the Groundhog project,
+licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Third-party data
+--------------------------------------------------------------------------------
+
+This project consumes publicly available datasets. The datasets are NOT
+distributed with this repository; they are downloaded by the user with the
+scripts provided. Each dataset keeps its own licence and attribution
+requirements, recorded in DATA.md:
+
+  * ESA Anomaly Dataset (ESA-ADB) — European Space Agency, Airbus Defence and
+    Space, KP Labs. Licensed under CC BY 3.0 IGO.
+    https://doi.org/10.5281/zenodo.12528696
+
+  * OPSSAT-AD — European Space Agency / KP Labs. Licensed under CC BY 4.0.
+    https://doi.org/10.5281/zenodo.15108715
+
+  * Mars Express Power dataset — European Space Agency. Licensed under
+    CC BY 4.0. https://doi.org/10.5281/zenodo.6327379
+
+  * SMAP / MSL telemetry — National Aeronautics and Space Administration.
+    https://github.com/khundman/telemanom
+
+  * NASA Prognostics Center of Excellence datasets — National Aeronautics and
+    Space Administration. https://data.phmsociety.org/nasa/
+
+  * Orbital element sets — CelesTrak / Space-Track.org.
+
+  * Space weather data — NOAA Space Weather Prediction Center.
+
+--------------------------------------------------------------------------------
+No endorsement
+--------------------------------------------------------------------------------
+
+Groundhog is an independent project. It is not affiliated with, endorsed by, or
+connected to the European Space Agency, NASA, NOAA, or any other agency,
+operator or company named above. Use of their openly published data does not
+imply any endorsement of this project by them.

@@ -1,0 +1,11 @@
+# Normalise line endings: LF in the repository and in the working tree, Windows included
+* text=auto eol=lf
+
+*.sh text eol=lf
+Makefile text eol=lf
+
+*.parquet binary
+*.zip binary
+*.pt binary
+*.onnx binary
+*.png binary
