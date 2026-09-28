@@ -29,3 +29,5 @@ Option 1.
 - **Dependence on labels.** The envelope is only as good as the labels: a mislabelled anomaly in the training window widens it.
 - **Unreachable limits.** `CADC0884` and `CADC0892` stay within 0 and 1.5708 (π/2) across the whole dataset, inside their envelope of −0.157 to 1.728. R0 cannot fire on them. This is the kind of finding M4 reports.
 - **Labels in fitting.** Fitting on the labels of the training window is legitimate, because they belong to the training period. The labels of the test period never reach the fitting.
+- **R0 is a fitted detector.** In M4 its limits are derived in every fold from that fold's training data, with the embargo applied. The harness refuses to evaluate a fold whose limits file records a training window that overlaps the fold's test period or the embargo before it.
+- **Not an industrial baseline.** These limits do not come from mission documents. Every report says so: they approximate the industrial baseline, reasonably, but are not it.

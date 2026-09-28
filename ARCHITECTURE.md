@@ -184,6 +184,15 @@ k3s on a single workstation, Helm charts, ArgoCD for GitOps, GitHub Actions for 
 
 One command replays a defined window, runs the configured detectors, and produces a report containing the ESA-ADB event-wise metrics plus the operational metrics above. If a number cannot be regenerated this way, it does not go in the README.
 
+Requirements set before M4 starts:
+
+- **Fitted detectors are refitted in every fold.** R0 is a fitted detector too: its limits come from nominal data (ADR 0007). In every fold of the walk-forward (ADR 0001), they are derived from that fold's training data only, with the embargo applied. The harness refuses to evaluate a fold when the training window recorded in the limits file's provenance overlaps the fold's test period or the embargo before it. An explicit test pins that refusal.
+- **Coverage per channel,** next to the other metrics: the share of each channel's stream that a detector actually evaluated, meaning samples with a score over samples seen (ADR 0005).
+- **Channels R0 cannot monitor by construction.** A channel qualifies when its observed range never leaves its limit envelope, so no persistence or hysteresis setting can make R0 fire on it; only a rate limit could. They are counted and listed. This is a result in its own right: it says what limit checking cannot see, however it is configured.
+- **Where the limits come from.** The report states that R0's limits do not come from mission documents. They are derived from nominal data, so they are a reasonable approximation of an industrial baseline, not the baseline itself.
+- **What the folds are.** The report states that four of the five OPSSAT-AD folds come from the same June night, so the dispersion across folds is a lower bound of the real variance.
+- **Events cut short by a gap** match as [ADR 0008](docs/adr/0008-events-cut-by-a-gap.md) decides: the truncated event detects the annotation it overlaps, and a new event after the gap is a redundant alarm.
+
 ## 5. Data model
 
 ### 5.1 Sample

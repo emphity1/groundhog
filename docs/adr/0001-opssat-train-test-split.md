@@ -50,6 +50,6 @@ Option 3, under four conditions.
 ## Consequences
 
 - Every OPSSAT-AD result appears twice: the walk-forward result, which is the result, and the official-split result, labelled as a comparison with the literature.
-- Four of the five test blocks come from a single night, one operating regime. Folds are therefore not independent samples of the mission, which is acceptable for a development dataset and is stated with every result.
+- Four of the five test blocks come from a single night, one operating regime. Folds are therefore not independent samples of the mission, and the dispersion across folds is a lower bound of the real variance. That is acceptable for a development dataset, and every report says so.
 - Anything fitted on data — scalers, thresholds, R0 limits (ADR 0007) — is refitted in every fold on that fold's training data only.
 - The replay engine is unaffected: it streams all segments regardless of split. The split is applied only when labels are joined to detections.
