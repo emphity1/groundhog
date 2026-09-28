@@ -25,6 +25,9 @@ dev = [
   "ruff>=0.7",
   "mypy>=1.13",
   "types-pyyaml>=6.0",
+  # Only to check src/groundhog/eval against the ESA-ADB reference in third_party/.
+  "pandas>=2.2",
+  "portion>=2.4",
 ]
 
 [project.urls]
@@ -41,6 +44,7 @@ packages = ["src/groundhog"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests", "scripts"]
+extend-exclude = ["third_party"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
