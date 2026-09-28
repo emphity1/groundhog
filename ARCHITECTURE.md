@@ -86,7 +86,7 @@ Requirements:
 - **Time compression.** A configurable factor; 1000× replays a year in about nine hours.
 - **Gap fidelity.** A six-hour gap in the archive is replayed as six hours of silence (compressed), not skipped. Systems that never see gaps break on the first one.
 - **Sampling fidelity.** Irregular and varying sample rates are reproduced as recorded.
-- **Determinism.** Same window, same seed, same config ⇒ identical stream ordering. Without this there is no benchmark.
+- **Determinism.** Same data version, same window, same seed ⇒ the same samples in the same order. The speed factor is not part of the stream's identity: it changes when samples are published, never which or in what order. Without this there is no benchmark.
 - **Checkpoint and resume.** A 17-year replay is not restarted because a pod was evicted.
 
 Implemented in `groundhog.replay` (`python -m groundhog.replay --config configs/replay/opssat.yaml`). The clock, the sink and the checkpoint store are injected interfaces; M1 writes JSON lines to stdout and keeps its checkpoint in a local JSON file. Ordering and the role of the seed are recorded in [ADR 0003](docs/adr/0003-replay-ordering-and-seed.md), delivery guarantees in [ADR 0004](docs/adr/0004-replay-delivery-and-checkpoints.md).

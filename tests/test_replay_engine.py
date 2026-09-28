@@ -93,13 +93,23 @@ def jsonl(samples: list[Sample]) -> bytes:
 
 
 class TestDeterminism:
-    def test_same_config_and_seed_give_byte_identical_streams(
+    """Scope of the claim (ADR 0003): same data version, same window, same seed."""
+
+    def test_same_data_window_and_seed_give_the_same_stream(
         self, opssat_config: OpssatSourceConfig
     ) -> None:
-        first = replay(opssat_config, seed=7)
-        second = replay(opssat_config, seed=7)
-        assert len(first.samples) == TOTAL
+        # Byte-identical, wall_ts included, because both runs share the same clock.
+        first = replay(opssat_config, seed=7, start=FIRST, end=LAST)
+        second = replay(opssat_config, seed=7, start=FIRST, end=LAST)
+        assert len(first.samples) == TOTAL - 1  # the window excludes LAST
         assert jsonl(first.samples) == jsonl(second.samples)
+
+    def test_speed_is_not_part_of_the_stream_identity(
+        self, opssat_config: OpssatSourceConfig
+    ) -> None:
+        slow, fast = replay(opssat_config, speed=1), replay(opssat_config, speed=1000)
+        assert content(slow.samples) == content(fast.samples)
+        assert [s.wall_ts for s in slow.samples] != [s.wall_ts for s in fast.samples]
 
     def test_every_reading_is_published_exactly_once(
         self, opssat_config: OpssatSourceConfig

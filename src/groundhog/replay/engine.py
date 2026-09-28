@@ -9,8 +9,10 @@
 * **Gap fidelity.** Silence in the archive is silence in the stream, compressed
   by the same factor as everything else. A window's start is where its stream
   starts, so any silence before the first sample is replayed too.
-* **Determinism.** Stream order is (mission_ts, channel rank), with the rank
-  derived from the seed (ADR 0003). Within a channel, order is mission time.
+* **Determinism.** Same data version, same window, same seed: the same samples
+  in the same order. Stream order is (mission_ts, channel rank), with the rank
+  derived from the seed (ADR 0003); within a channel, order is mission time. The
+  speed factor is not part of the stream's identity: it changes only wall time.
 * **Checkpoint and resume.** Exact after a graceful stop, at least once after a
   crash: a checkpoint is saved only after the sink has flushed, and a completed
   replay removes it (ADR 0004).

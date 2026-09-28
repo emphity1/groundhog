@@ -29,7 +29,7 @@ Groundhog is a reference implementation of the alternative: a system that learns
 
 ## Why the name
 
-Groundhog is the **ground segment**, and it is also *Groundhog Day*: the core of the system is a replay engine that lives the same stretch of mission time over and over, deterministically, until the detectors get it right.
+Groundhog is the **ground segment**, and it is also *Groundhog Day*: the core of the system is a replay engine that lives the same stretch of mission time over and over (same data, same window, same seed: same stream) until the detectors get it right.
 
 ## Architecture
 
@@ -88,13 +88,15 @@ make evaluate      # reproducible benchmark run, produces the metrics table
 ## Roadmap
 
 - [x] **M0** — repository skeleton, data schema, dataset download scripts
-- [x] **M1** — replay engine with deterministic output and gap fidelity
-- [ ] **M2** — ingest, stream transport, hot and cold storage
-- [ ] **M3** — limit checking end to end (a complete system with no ML)
+- [x] **M1** — replay engine with gap fidelity and deterministic output: same data, window and seed give the same stream
+- [ ] **M3** — limit checking end to end on files and pipes (`replay | detect`, no bus, no database)
 - [ ] **M4** — evaluation harness and the first metrics on real data
+- [ ] **M2** — ingest, stream transport, hot and cold storage
 - [ ] **M5** — statistical baseline, then the ML detectors
 - [ ] **M6** — orbital and space weather context enrichment
 - [ ] **M7** — operator console, feedback loop, shadow-mode model promotion
+
+M3 and M4 come before M2. The replay already emits JSON lines, so a detector can read them from stdin with no bus and no database. That brings the first real numbers much sooner. Milestones keep their numbers; only the order changed.
 
 ## Licence and attribution
 

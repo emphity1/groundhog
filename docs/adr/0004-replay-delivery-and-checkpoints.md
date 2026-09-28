@@ -17,9 +17,12 @@ A replay must resume where it stopped, with no duplicates and no skips (ARCHITEC
 
 Option 1. N (`every_samples`) and the pause threshold (`min_idle_s`) are set in `configs/replay/*.yaml`. A checkpoint is written only after the sink has flushed. A completed replay deletes its checkpoint, so the next run starts from the beginning; `--restart` discards the checkpoint of an unfinished one.
 
+**Requirement on everything downstream: idempotence under the key `(mission, channel, mission_ts)`.** Consuming a sample twice must have the same effect as consuming it once. This is what makes at-least-once delivery safe. It becomes critical in M2, where the bus and the stores will see the repeats. It is written now so that nothing built before then relies on exactly-once delivery.
+
 ## Consequences
 
-- A consumer of the M1 JSONL stream may see up to N repeated samples after a crash. With Redpanda in M2, exactly-once becomes possible through transactions; that is a separate decision.
+- A consumer of the M1 JSONL stream may see up to N repeated samples after a crash; idempotence on `(mission, channel, mission_ts)` makes them harmless. With Redpanda in M2, exactly-once becomes possible through transactions; that is a separate decision.
+- Within a channel the stream's mission time strictly increases, and a repeat can only come from resuming at an earlier checkpoint. A consumer can therefore recognise a repeat without remembering every key: it is any sample whose `mission_ts` does not exceed the last one processed for its `(mission, channel)`. The detect pipeline (M3) drops those.
 - A checkpoint holds the last sample published, as `(mission_ts, channel)`, and the mission time reached. A replay stopped halfway through a gap resumes with only the rest of that gap.
 - The checkpoint is bound to a fingerprint of the data version, the window and the seed. Resuming with any of them changed is refused; changing the speed is allowed.
 - A replay must run as a job, not as an always-restarting service: a supervisor that restarts a completed replay starts it over.
