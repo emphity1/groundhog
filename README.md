@@ -41,7 +41,7 @@ An interactive mockup of the operator console (simulated data) is available sepa
 
 ## Data
 
-All datasets are public and free. **None of them are committed to this repository** — download scripts with checksums will live in `scripts/`, and full citations in `DATA.md`.
+All datasets are public and free. **None of them are committed to this repository** — the download script in `scripts/` verifies checksums, and `DATA.md` has the full citations.
 
 | Dataset | What it is | Licence | Role here |
 |---|---|---|---|
@@ -70,19 +70,25 @@ The statistical baseline is not a formality. If a moving average with an adaptiv
 
 ## Running it
 
-Not yet. The intended entry points, once they exist:
+The replay engine runs today, on the development dataset:
+
+```bash
+make setup                   # uv if installed, otherwise a virtualenv with pip
+make data-fetch DS=opssat    # ~20 MB, checksums verified
+make replay                  # OPSSAT-AD as a live stream, 1000x real time
+```
+
+`make replay` writes samples to stdout as JSON lines and logs to stderr. Ctrl+C leaves a checkpoint that the next run resumes from. The other entry points arrive with their milestones:
 
 ```bash
 make dev-up        # k3s + Redpanda + TimescaleDB + MinIO, locally
-make data-fetch    # download datasets into the local lake
-make replay        # replay a mission window as a live stream
 make evaluate      # reproducible benchmark run, produces the metrics table
 ```
 
 ## Roadmap
 
-- [ ] **M0** — repository skeleton, data schema, dataset download scripts
-- [ ] **M1** — replay engine with deterministic output and gap fidelity
+- [x] **M0** — repository skeleton, data schema, dataset download scripts
+- [x] **M1** — replay engine with deterministic output and gap fidelity
 - [ ] **M2** — ingest, stream transport, hot and cold storage
 - [ ] **M3** — limit checking end to end (a complete system with no ML)
 - [ ] **M4** — evaluation harness and the first metrics on real data
