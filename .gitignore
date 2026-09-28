@@ -13,6 +13,9 @@
 *.pem
 *.key
 
+# Evaluation reports: regenerated with make evaluate, never edited
+reports/
+
 # Model artefacts and experiment tracking
 mlruns/
 models/

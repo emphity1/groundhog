@@ -6,6 +6,7 @@ DS ?= opssat
 REPLAY_CONFIG ?= configs/replay/opssat.yaml
 DETECT_CONFIG ?= configs/detect/opssat_r0.yaml
 LIMITS_SPEC ?= configs/limits/opssat.derive.yaml
+EVAL_CONFIG ?= configs/eval/opssat_r0.yaml
 
 # Without any sh.exe on PATH, make for Windows falls back to cmd.exe.
 ifeq ($(SHELL),sh.exe)
@@ -88,13 +89,13 @@ detect: $(ENV) ## Events from the samples on stdin: make replay | make detect
 limits: $(ENV) ## Derive R0 limits from nominal training data [LIMITS_ARGS=--check]
 	$(PY) scripts/derive_limits.py $(LIMITS_SPEC) $(LIMITS_ARGS)
 
+evaluate: $(ENV) ## Reproducible benchmark run; writes the report [EVAL_CONFIG=...]
+	$(PY) -m groundhog.eval --config $(EVAL_CONFIG)
+
 # --- not implemented yet: see the roadmap in README.md ---
 
 train: ## [M5] Train a detector from a config file
 	@echo "not implemented yet - milestone M5"; exit 1
-
-evaluate: ## [M4] Reproducible benchmark run
-	@echo "not implemented yet - milestone M4"; exit 1
 
 dev-up: ## [M2] Local stack: k3s, Redpanda, TimescaleDB, MinIO
 	@echo "not implemented yet - milestone M2"; exit 1

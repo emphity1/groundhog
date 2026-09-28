@@ -1,0 +1,39 @@
+# The M4 benchmark: R0 limit checking on OPSSAT-AD, walk-forward and official split.
+#
+#   python -m groundhog.eval --config configs/eval/opssat_r0.yaml      (or: make evaluate)
+#
+# Every key is required. Paths are relative to the repository root. The report goes to
+# `output`, which git ignores: numbers are regenerated, never edited (ARCHITECTURE §4.15).
+
+replay: configs/replay/opssat.yaml         # the data file, the channels and the seed
+detect: configs/detect/opssat_r0.yaml      # the arbiter's severity bands. Its limits file is
+                                           # not used: every fold derives its own
+limits: configs/limits/opssat.derive.yaml  # margin and alarm policy; every fold supplies
+                                           # its own training window
+lock: data/datasets.lock.json              # the data version recorded by make data-fetch
+
+ground_truth:
+  run_gap_periods: 2       # more than 2 sampling periods of silence break a run (ADR 0001)
+
+# ADR 0001, condition 4: each block is tested after training on everything before it,
+# minus the embargo, which the harness computes. No labelled event may span a boundary
+# (ADR 0009): the June night is cut at 06:29 and 10:49 rather than 07:00 and 11:00,
+# the last instants before those hours at which no labelled event is under way.
+walk_forward:
+  min_events: 10
+  blocks:
+    - {start: 2022-02-01T00:00:00Z, end: 2022-02-12T00:00:00Z}
+    - {start: 2022-06-01T23:00:00Z, end: 2022-06-02T03:00:00Z}
+    - {start: 2022-06-02T03:00:00Z, end: 2022-06-02T06:29:00Z}
+    - {start: 2022-06-02T06:29:00Z, end: 2022-06-02T10:49:00Z}
+    - {start: 2022-06-02T10:49:00Z, end: 2022-06-02T16:00:00Z}
+
+metrics:
+  beta: 0.5                           # ESA-ADB's F0.5
+  adtqc_exponent: 2.718281828459045   # e, ESA-ADB's default
+  gap_sensitivity_s: [60, 150]        # ADR 0008: redundant alarms for each R0 max_gap_s;
+                                      # 60 is the spec's, and the headline runs use it
+  cpu_min_s: 1.0                      # detection passes repeat until 1 s of CPU adds up, and the
+                                      # mean per pass is reported: finer than the process clock
+
+output: reports/opssat_r0

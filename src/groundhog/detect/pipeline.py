@@ -68,16 +68,20 @@ class DetectPipeline:
         self._arbiter = arbiter
         self._last: dict[tuple[str, str], datetime] = {}
         self.coverage = Coverage()
+        self.coverage_by_channel: dict[str, Coverage] = {}
 
     def feed(self, sample: Sample) -> list[Event]:
         """The events to publish after ``sample``. A repeat is dropped: within a
         channel mission time strictly increases, so a sample that does not move it
         forward has been processed already (ADR 0004)."""
+        channel = self.coverage_by_channel.setdefault(sample.channel, Coverage())
         self.coverage.samples += 1
+        channel.samples += 1
         key = (sample.mission, sample.channel)
         last = self._last.get(key)
         if last is not None and sample.mission_ts <= last:
             self.coverage.repeats += 1
+            channel.repeats += 1
             return []
         self._last[key] = sample.mission_ts
 
@@ -85,7 +89,9 @@ class DetectPipeline:
         if score is None:
             return []
         self.coverage.scored += 1
+        channel.scored += 1
         self.coverage.firing += score.firing
+        channel.firing += score.firing
         return self._arbiter.update(score)
 
     def finish(self) -> list[Event]:

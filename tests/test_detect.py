@@ -150,6 +150,10 @@ class TestPipeline:
         assert pipe.coverage.scored == len(samples) - channel_b
         assert pipe.coverage.ratio == pytest.approx(1 - channel_b / len(samples))
         assert all(e.channels[0].channel != "CH_B" for e in events)
+        by_channel = pipe.coverage_by_channel
+        assert {c: v.ratio for c, v in by_channel.items()} == {"CH_A": 1, "CH_B": 0, "CH_C": 1}
+        assert by_channel["CH_B"].samples == channel_b
+        assert sum(v.firing for v in by_channel.values()) == pipe.coverage.firing
 
 
 def write_detect_config(tmp_path: Path, limits: dict[str, Any] = LIMITS, **extra: Any) -> Path:
