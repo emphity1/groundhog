@@ -57,33 +57,53 @@ What is **not** available: telemetry from a commercial operator in service. That
 
 ## Metrics
 
-Results go here once the evaluation harness runs end to end. The table below is the shape of what will be reported — every number produced by `make evaluate` on a pinned dataset version.
+Every number here is produced by `make evaluate` on a pinned dataset version. The report it writes has the ESA-ADB metrics in full, fold by fold, and the comparison with the literature ([ADR 0009](docs/adr/0009-evaluation-protocol.md)).
 
-| Detector | Event recall | Precision | Median detection delay | Alarms / day | CPU per channel |
+**OPSSAT-AD, walk-forward over 5 folds**, with an embargo of 6,845 s computed from the detector and the labels ([ADR 0001](docs/adr/0001-opssat-train-test-split.md)). Each cell gives the mean over the folds, then the lowest and highest fold in brackets. Four of the five folds come from one June night, so the spread is a lower bound of the real variance. Produced at commit `d26905f`.
+
+| Detector | Event recall | Precision | Median alarm delay | Alarms / day | CPU per channel |
 |---|---|---|---|---|---|
-| Limit checking (OOL) | — | — | — | — | — |
+| Limit checking (R0) | 0.038 [0.000–0.143] | 0.400 [0.000–1.000]¹ | 327 s [39–615]² | 2.7 [0.0–7.2]³ | 0.0029 millicores [0.0005–0.0042]⁴ |
 | Adaptive statistical baseline | — | — | — | — | — |
 | Predictive model | — | — | — | — | — |
 | Reconstruction model | — | — | — | — | — |
+
+1. Corrected event-wise precision, as ESA-ADB defines it. R0 raised 3 alarms over the 5 folds, and none of them was false. In the 3 folds with no alarm at all, ESA-ADB counts precision as 0.
+2. Groundhog's own measure: `fired_at` minus the annotated start. It is averaged over the 2 folds in which R0 detected anything.
+3. Per day of telemetry actually received, not per calendar day.
+4. Measured on an AMD Ryzen 7 7700X. This is the only number that depends on the machine.
+
+What the first row says:
+
+- R0's limits come from nominal data, not mission documents ([ADR 0007](docs/adr/0007-r0-limits-from-nominal-envelope.md)).
+- With those limits, limit checking detects 4 of the 231 labelled events in the test blocks.
+- In every fold, the configured check cannot fire at all on 1 to 5 of the channels: their values never leave the limits.
+- On the dataset's official split, scored for comparison with published baselines only, R0 flags no test segment (AUC-ROC 0.544).
 
 The statistical baseline is not a formality. If a moving average with an adaptive threshold matches the neural models, that result gets published here as prominently as any other.
 
 ## Running it
 
-Replay and limit checking run today, on the development dataset:
+Replay, limit checking and the benchmark run today, on the development dataset:
 
 ```bash
 make setup                   # uv if installed, otherwise a virtualenv with pip
 make data-fetch DS=opssat    # ~20 MB, checksums verified
 make replay                  # OPSSAT-AD as a live stream, 1000x real time
 make replay | make detect    # R0 limit checking on that stream: events as JSON lines
+make evaluate                # the benchmark: the report goes to reports/opssat_r0/
 ```
 
-`make replay` writes samples to stdout as JSON lines and logs to stderr. Ctrl+C leaves a checkpoint that the next run resumes from. `make detect` reads those samples on stdin and writes a run header, then events, as JSON lines. Its limits come from `make limits`, which derives them from nominal training data because OPSSAT-AD ships none. The other entry points arrive with their milestones:
+`make replay` writes samples to stdout as JSON lines and logs to stderr. Ctrl+C leaves a checkpoint that the next run resumes from.
+
+`make detect` reads those samples on stdin and writes a run header, then events, as JSON lines. Its limits come from `make limits`, which derives them from nominal training data because OPSSAT-AD ships none.
+
+`make evaluate` runs the whole benchmark in under a minute. In every fold it derives R0's limits from that fold's training data only. It refuses to run on data that is not the version recorded when it was fetched.
+
+The other entry points arrive with their milestones:
 
 ```bash
 make dev-up        # k3s + Redpanda + TimescaleDB + MinIO, locally
-make evaluate      # reproducible benchmark run, produces the metrics table
 ```
 
 ## Roadmap
@@ -91,7 +111,7 @@ make evaluate      # reproducible benchmark run, produces the metrics table
 - [x] **M0** — repository skeleton, data schema, dataset download scripts
 - [x] **M1** — replay engine with gap fidelity and deterministic output: same data, window and seed give the same stream
 - [x] **M3** — limit checking end to end on files and pipes (`replay | detect`, no bus, no database)
-- [ ] **M4** — evaluation harness and the first metrics on real data
+- [x] **M4** — evaluation harness and the first metrics on real data
 - [ ] **M2** — ingest, stream transport, hot and cold storage
 - [ ] **M5** — statistical baseline, then the ML detectors
 - [ ] **M6** — orbital and space weather context enrichment
