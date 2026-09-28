@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from groundhog.ingest import IngestError
 from groundhog.schema import ChannelKind, Quality, Reading
 
-__all__ = ["ChannelSpec", "OpssatSource", "OpssatSourceConfig"]
+__all__ = ["ChannelSpec", "OpssatSource", "OpssatSourceConfig", "nominal_values"]
 
 # Part of the dataset's format, not a tunable.
 _COLUMNS = ("channel", "timestamp", "value")
@@ -122,17 +122,8 @@ def _parse(text: str, path: Path) -> dict[str, tuple[list[datetime], list[float]
 
     points: dict[str, list[tuple[datetime, float]]] = {}
     for line, row in enumerate(rows, start=2):
-        try:
-            channel, stamp, text_value = (row[i] for i in at)
-            mission_ts = datetime.fromisoformat(stamp)
-            value = float(text_value)
-        except (IndexError, ValueError) as exc:
-            raise IngestError(f"{path}:{line}: {exc}") from None
-        if mission_ts.tzinfo is None:
-            raise IngestError(f"{path}:{line}: timestamp {stamp!r} has no time zone")
-        if not math.isfinite(value):
-            raise IngestError(f"{path}:{line}: value {text_value!r} is not finite")
-        points.setdefault(channel, []).append((mission_ts.astimezone(UTC), value))
+        channel, mission_ts, value = _measurement(row, at, path, line)
+        points.setdefault(channel, []).append((mission_ts, value))
 
     series: dict[str, tuple[list[datetime], list[float]]] = {}
     for channel, samples in points.items():
@@ -143,6 +134,54 @@ def _parse(text: str, path: Path) -> dict[str, tuple[list[datetime], list[float]
                 raise IngestError(f"{path}: channel {channel} has two samples at {later}")
         series[channel] = (times, [v for _, v in samples])
     return series
+
+
+def nominal_values(
+    path: Path, start: datetime | None, end: datetime | None
+) -> dict[str, list[float]]:
+    """Per channel, the values labelled nominal with ``start <= mission_ts < end``.
+
+    For fitting on a training window, and nothing else: labels never reach the
+    stream, which is read through :class:`OpssatSource`.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise IngestError(f"{path} not found: fetch it with `make data-fetch DS=opssat`") from None
+    rows = csv.reader(io.StringIO(text))
+    header = next(rows, None)
+    columns = (*_COLUMNS, "anomaly")
+    if header is None or not set(columns) <= set(header):
+        raise IngestError(f"{path}: expected columns {', '.join(columns)}, found {header}")
+    at = [header.index(column) for column in columns]
+
+    nominal: dict[str, list[float]] = {}
+    for line, row in enumerate(rows, start=2):
+        channel, mission_ts, value = _measurement(row, at, path, line)
+        label = row[at[3]]
+        if label not in ("0", "1"):
+            raise IngestError(f"{path}:{line}: anomaly label {label!r} is neither 0 nor 1")
+        in_window = (start is None or mission_ts >= start) and (end is None or mission_ts < end)
+        if in_window and label == "0":
+            nominal.setdefault(channel, []).append(value)
+    return nominal
+
+
+def _measurement(
+    row: list[str], at: list[int], path: Path, line: int
+) -> tuple[str, datetime, float]:
+    """Channel, UTC mission time and value of one row, or an error naming the line."""
+    try:
+        channel, stamp, text_value = (row[i] for i in at[:3])
+        mission_ts = datetime.fromisoformat(stamp)
+        value = float(text_value)
+    except (IndexError, ValueError) as exc:
+        raise IngestError(f"{path}:{line}: {exc}") from None
+    if mission_ts.tzinfo is None:
+        raise IngestError(f"{path}:{line}: timestamp {stamp!r} has no time zone")
+    if not math.isfinite(value):
+        raise IngestError(f"{path}:{line}: value {text_value!r} is not finite")
+    return channel, mission_ts.astimezone(UTC), value
 
 
 def _check_declared(found: set[str], declared: set[str], path: Path) -> None:

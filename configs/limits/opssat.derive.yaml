@@ -1,0 +1,21 @@
+# How configs/limits/opssat.yaml is derived (docs/adr/0007-r0-limits-from-nominal-envelope.md).
+# Regenerate it with: make limits. Paths are relative to the repository root.
+
+source: configs/replay/opssat.yaml   # the data file, the mission and the kind of every channel
+
+# Mission time, start inclusive, end exclusive. Provisional: January-February, the part
+# before the June night, until M4 fixes the folds of ADR 0001 and refits per fold.
+training:
+  start: null
+  end: 2022-03-01T00:00:00Z
+
+margin: 0.1                          # each side pushed out by 10 % of the nominal range
+
+# Alarm policy written into the limits file. Starting values, not results: M4 weighs
+# them against alarm noise.
+defaults:
+  hysteresis: 0.05                   # back inside by 5 % of the limit span to clear
+  persistence: {samples: 3}          # 3 consecutive violating samples to fire
+  max_gap_s: 60                      # a longer silence on a channel resets its state
+
+output: configs/limits/opssat.yaml

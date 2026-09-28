@@ -4,6 +4,7 @@
 SHELL := /bin/bash
 DS ?= opssat
 REPLAY_CONFIG ?= configs/replay/opssat.yaml
+LIMITS_SPEC ?= configs/limits/opssat.derive.yaml
 
 # Without any sh.exe on PATH, make for Windows falls back to cmd.exe.
 ifeq ($(SHELL),sh.exe)
@@ -37,7 +38,7 @@ PY := $(VENV_PY)
 ENV := .venv/.pip-installed
 endif
 
-.PHONY: help setup lint fmt typecheck test check data-list data-fetch replay train evaluate dev-up dev-down
+.PHONY: help setup lint fmt typecheck test check data-list data-fetch replay limits train evaluate dev-up dev-down
 
 help: ## Show the available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -79,6 +80,9 @@ data-fetch: $(ENV) ## Download a dataset: make data-fetch DS=opssat
 # Silent recipe: stdout is the stream, and make's echo of the command would corrupt it.
 replay: $(ENV) ## Replay a mission window as JSON lines on stdout [REPLAY_ARGS=--restart]
 	@$(PY) -m groundhog.replay --config $(REPLAY_CONFIG) $(REPLAY_ARGS)
+
+limits: $(ENV) ## Derive R0 limits from nominal training data [LIMITS_ARGS=--check]
+	$(PY) scripts/derive_limits.py $(LIMITS_SPEC) $(LIMITS_ARGS)
 
 # --- not implemented yet: see the roadmap in README.md ---
 
