@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -17,9 +17,74 @@ from groundhog.schema import (
     Quality,
     Reading,
     Sample,
+    Score,
 )
 
 T0 = datetime(2026, 3, 1, 4, 12, tzinfo=UTC)
+
+
+def make_score(**overrides: object) -> Score:
+    defaults: dict[str, object] = {
+        "detector": DetectorId.R0_LIMITS,
+        "mission": "esa_adb/mission1",
+        "channel": "TM_EPS_BATT_V",
+        "mission_ts": T0,
+        "value": 0.0,
+        "firing": False,
+        "onset": None,
+        "quality": Quality.OK,
+    }
+    return Score(**(defaults | overrides))  # type: ignore[arg-type]
+
+
+class TestQuality:
+    def test_the_declared_order_is_the_ranking(self) -> None:
+        assert list(Quality) == [Quality.OK, Quality.STALE, Quality.GAP_FILLED, Quality.SUSPECT]
+
+    def test_worst_is_the_least_trustworthy(self) -> None:
+        assert Quality.worst() is Quality.OK
+        assert Quality.worst(Quality.OK, Quality.STALE) is Quality.STALE
+        assert Quality.worst(Quality.SUSPECT, Quality.GAP_FILLED, Quality.OK) is Quality.SUSPECT
+
+
+class TestScore:
+    def test_a_nominal_verdict_is_a_zero_score(self) -> None:
+        score = make_score()
+        assert (score.value, score.firing, score.onset) == (0.0, False, None)
+
+    def test_firing_comes_with_its_onset_and_only_then(self) -> None:
+        firing = make_score(value=1.5, firing=True, onset=T0 - timedelta(seconds=30))
+        assert firing.onset == T0 - timedelta(seconds=30)
+        with pytest.raises(ValidationError, match="exactly when"):
+            make_score(value=1.5, firing=True)
+        with pytest.raises(ValidationError, match="exactly when"):
+            make_score(onset=T0)
+
+    def test_onset_cannot_follow_the_sample(self) -> None:
+        with pytest.raises(ValidationError, match="cannot come after"):
+            make_score(value=1.0, firing=True, onset=T0 + timedelta(seconds=1))
+
+    @pytest.mark.parametrize("value", [-0.1, float("nan"), float("inf")])
+    def test_value_is_finite_and_never_negative(self, value: float) -> None:
+        with pytest.raises(ValidationError):
+            make_score(value=value)
+
+    def test_every_field_must_be_given(self) -> None:
+        full = make_score().model_dump()
+        for field in Score.model_fields:
+            with pytest.raises(ValidationError):
+                Score(**{k: v for k, v in full.items() if k != field})
+
+    def test_severity_and_thresholds_are_not_part_of_a_score(self) -> None:
+        assert {"severity", "threshold", "limit"}.isdisjoint(Score.model_fields)
+
+    def test_roundtrip_in_utc(self) -> None:
+        rome = timezone(timedelta(hours=2))
+        score = make_score(mission_ts=datetime(2026, 3, 1, 6, 12, tzinfo=rome))
+        assert score.mission_ts == T0 and score.mission_ts.tzinfo is UTC
+        assert Score.model_validate_json(score.model_dump_json()) == score
+        with pytest.raises(ValidationError, match="timezone-aware"):
+            make_score(mission_ts=datetime(2026, 3, 1, 4, 12))
 
 
 def make_sample(**overrides: object) -> Sample:

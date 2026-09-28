@@ -4,8 +4,8 @@
 Everything in the system speaks these types. A :class:`Sample` is one telemetry
 measurement; an :class:`Event` is an anomaly candidate as the operator sees it.
 Source adapters produce readings, a publisher (the replay engine, or a live feed)
-turns each :class:`Reading` into a sample, detectors consume samples, the arbiter
-produces events.
+turns each :class:`Reading` into a sample, detectors answer samples with a
+:class:`Score`, the arbiter turns scores into events.
 
 Two conventions that the rest of the codebase depends on:
 
@@ -36,6 +36,7 @@ __all__ = [
     "Quality",
     "Reading",
     "Sample",
+    "Score",
     "Severity",
     "Verdict",
 ]
@@ -62,7 +63,11 @@ class ChannelKind(StrEnum):
 
 
 class Quality(StrEnum):
-    """How much the value can be trusted."""
+    """How much the value can be trusted.
+
+    Members are declared from the most to the least trustworthy; :meth:`worst`
+    relies on that order.
+    """
 
     OK = "ok"
     STALE = "stale"
@@ -73,6 +78,15 @@ class Quality(StrEnum):
 
     SUSPECT = "suspect"
     """Kept, but flagged by ingest (out of physical range, decode issue)."""
+
+    @classmethod
+    def worst(cls, *qualities: Quality) -> Quality:
+        """The least trustworthy of ``qualities``, ``ok`` if there are none.
+
+        Whatever is derived from samples inherits the worst of their qualities.
+        """
+        ranking = list(cls)
+        return max(qualities, key=ranking.index, default=cls.OK)
 
 
 def _require_utc(value: datetime) -> datetime:
@@ -160,6 +174,51 @@ class Detection(BaseModel):
     )
 
     _utc = field_validator("fired_at")(_require_utc)
+
+
+class Score(BaseModel):
+    """One detector's answer to one sample (docs/adr/0005-detector-scores.md).
+
+    ``value`` says how anomalous the sample looks to *that* detector: 0 when the
+    detector evaluated the sample and found it nominal, higher when more anomalous.
+    It is internal to the detector and **not comparable across detectors**;
+    comparing them takes an explicit calibration, which does not exist yet.
+
+    A detector with no opinion on a sample (warm-up, a gap, too little data, a
+    channel it does not check) emits no score at all, never a zero. The difference
+    is what coverage measures: how much of the stream was actually monitored.
+
+    ``firing`` is the detector's own alarm decision, after whatever persistence or
+    hysteresis it applies; ``onset`` is the mission time at which that alarm
+    condition began. The thresholds behind the decision are not repeated in every
+    score: the detector's configuration hash, in the run header, identifies them.
+    Severity is not here either: the arbiter alone assigns it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    detector: DetectorId
+    mission: str = Field(min_length=1)
+    channel: str = Field(min_length=1)
+    mission_ts: datetime = Field(description="Mission time of the sample scored")
+    value: float = Field(
+        ge=0.0, allow_inf_nan=False, description="Detector-internal; 0 means nominal"
+    )
+    firing: bool = Field(description="Whether the detector's alarm condition holds")
+    onset: datetime | None = Field(
+        description="Mission time the alarm condition began; null unless firing"
+    )
+    quality: Quality = Field(description="Worst quality among the samples this score used")
+
+    _utc = field_validator("mission_ts", "onset")(lambda v: v if v is None else _require_utc(v))
+
+    @model_validator(mode="after")
+    def _onset_with_firing(self) -> Score:
+        if self.firing != (self.onset is not None):
+            raise ValueError("onset is given exactly when the score is firing")
+        if self.onset is not None and self.onset > self.mission_ts:
+            raise ValueError("onset cannot come after the sample it is reported with")
+        return self
 
 
 class ChannelContribution(BaseModel):
