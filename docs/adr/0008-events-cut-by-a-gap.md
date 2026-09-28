@@ -24,8 +24,9 @@ M4's matching rule has to say what a truncated event counts for, and it has to s
 Option 1.
 
 - **Recall.** An annotation is one true positive if any event overlaps it, truncated or not.
-- **The event after the gap.** A second event on the same annotation after the gap is neither a new true positive nor a false positive. It is a redundant alarm, `TP_r`, which lowers the alarming precision.
-- **Timing.** Detection timing (ADTQC, and Groundhog's detection delay) is taken from the first event that overlaps the annotation, the truncated one if it came first.
+- **The event after the gap.** A second event on the same annotation after the gap is neither a new true positive nor a false positive. It is a redundant alarm, `TP_r`, which lowers the alarming precision. This applies only when the second event falls on the **same** annotation. An event after the gap that overlaps a different annotation is an ordinary true positive for that annotation.
+- **Timing.** Detection timing is taken from the first event that overlaps the annotation, the truncated one if it came first. That holds for both timing measures: ADTQC, exactly as ESA-ADB defines it, and alarm delay, Groundhog's own.
+- **Dependence on configuration.** How many redundant alarms a gap produces depends on `max_gap_s`, which is Groundhog's choice, not the data's. The report gives the count for at least two values, 60 s and 150 s, so that a reader sees how much of the result comes from the configuration and how much from the data.
 
 Option 2 asks more of a detector than ESA-ADB's event-wise recall does, and numbers computed that way would not be comparable with published results. Option 3 would hide what the gap did: the operator did receive two alarms, and ESA-ADB counts redundant alarms rather than merging them away.
 
@@ -33,5 +34,5 @@ Option 2 asks more of a detector than ESA-ADB's event-wise recall does, and numb
 
 - Missing data never costs a detection: recall is not penalised for what the detector could not see.
 - Missing data can cost alarm precision: the same anomaly is alarmed twice. That shows in the alarming precision and in alarms per day, which count distinct event ids (ADR 0006).
-- The truncation does not change the detection delay, which is set by the first event.
-- Still open, and part of the rest of M4's matching rule: which instant of an event counts as its detection start, the onset `t_start` or `detections[0].fired_at`, when the detector actually raised the alarm.
+- The truncation does not change detection timing, which is set by the first event.
+- The two timing measures use different instants of that first event. ADTQC takes the detection's start, as ESA-ADB defines it. Alarm delay takes `detections[0].fired_at`, the moment the detector actually raised the alarm. Both are recorded in ARCHITECTURE §4.15.

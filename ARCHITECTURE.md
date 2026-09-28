@@ -116,7 +116,7 @@ Two rules that are not negotiable:
 
 All implement the same interface: samples in, scores out.
 
-The interface is `groundhog.detectors.base.Detector` ([ADR 0005](docs/adr/0005-detector-scores.md)). One sample goes in and a `Score` comes out, or nothing, which means no opinion. The detector keeps its state per channel and never sees a later sample. The score's value is internal to the detector that produced it. R0 lives in `groundhog.detectors.r0_limits`, configured in `configs/limits/`. For datasets without operational limits, its limits come from the nominal training envelope ([ADR 0007](docs/adr/0007-r0-limits-from-nominal-envelope.md)).
+The interface is `groundhog.detectors.base.Detector` ([ADR 0005](docs/adr/0005-detector-scores.md)). One sample goes in and a `Score` comes out, or nothing, which means no opinion. The detector keeps its state per channel and never sees a later sample. The score's value is internal to the detector that produced it. Every detector declares its lookback: how far back in mission time a decision to fire can reach. It sets the detector term of the evaluation embargo ([ADR 0009](docs/adr/0009-evaluation-protocol.md)). R0 lives in `groundhog.detectors.r0_limits`, configured in `configs/limits/`. For datasets without operational limits, its limits come from the nominal training envelope ([ADR 0007](docs/adr/0007-r0-limits-from-nominal-envelope.md)).
 
 | Id | Detector | Approach | Cost | Catches |
 |---|---|---|---|---|
@@ -180,18 +180,25 @@ In a domain where every anomaly triggers a formal investigation, that trace is a
 
 k3s on a single workstation, Helm charts, ArgoCD for GitOps, GitHub Actions for CI, testcontainers for integration tests. Training jobs run on rented cloud GPUs; nothing else leaves the local cluster.
 
-### 4.15 Evaluation harness *(planned)*
+### 4.15 Evaluation harness *(M4)*
 
 One command replays a defined window, runs the configured detectors, and produces a report containing the ESA-ADB event-wise metrics plus the operational metrics above. If a number cannot be regenerated this way, it does not go in the README.
 
-Requirements set before M4 starts:
+`make evaluate` runs `groundhog.eval` on `configs/eval/opssat_r0.yaml`. In every fold it derives R0's limits from the fold's training data, replays the test block through the replay engine on a clock that never waits, runs detector and arbiter as `groundhog.detect` does, and scores the alarms. The same detector is then scored on the official split, as segment classification. The report goes to `reports/`, with the limits and the alarms of every run. The ESA-ADB metrics are a port of the reference implementation, which is vendored in `third_party/esa_adb` and held to it by tests. [ADR 0009](docs/adr/0009-evaluation-protocol.md) records how the harness meets the requirements below, and the choices they left open: fold boundaries, the embargo, how alarms become detections, and how telemetry time and CPU are measured.
 
+Requirements set before M4 started, all met:
+
+- **The data version is checked first.** The MD5 of the data file must match the version recorded in `data/datasets.lock.json`, and so must the `data_md5` in the limits file's provenance. On any mismatch the harness stops and prints both hashes, the expected one and the one found.
 - **Fitted detectors are refitted in every fold.** R0 is a fitted detector too: its limits come from nominal data (ADR 0007). In every fold of the walk-forward (ADR 0001), they are derived from that fold's training data only, with the embargo applied. The harness refuses to evaluate a fold when the training window recorded in the limits file's provenance overlaps the fold's test period or the embargo before it. An explicit test pins that refusal.
+- **Detection timing, two measures kept apart.**
+  - ADTQC, computed exactly as ESA-ADB defines it (arXiv:2406.17826, equation 5), from the detection's start.
+  - Alarm delay, Groundhog's own metric and labelled as such: `fired_at` minus the annotated start. It is the operational number that goes in the README.
+  - The distribution of `fired_at` minus onset, also reported: the latency that persistence and hysteresis cost, for comparison with the models in M5.
 - **Coverage per channel,** next to the other metrics: the share of each channel's stream that a detector actually evaluated, meaning samples with a score over samples seen (ADR 0005).
-- **Channels R0 cannot monitor by construction.** A channel qualifies when its observed range never leaves its limit envelope, so no persistence or hysteresis setting can make R0 fire on it; only a rate limit could. They are counted and listed. This is a result in its own right: it says what limit checking cannot see, however it is configured.
+- **Channels on which the configured R0 check cannot fire over the evaluated window,** counted and listed for every fold. A channel qualifies when its observed range in the fold's test window never leaves the limit envelope fitted for that fold, so no persistence or hysteresis setting can make R0 fire on it; only a rate limit could. The metric describes the fold's configuration, not the channel. It is a result in its own right: it says what the configured limit checking cannot see.
 - **Where the limits come from.** The report states that R0's limits do not come from mission documents. They are derived from nominal data, so they are a reasonable approximation of an industrial baseline, not the baseline itself.
 - **What the folds are.** The report states that four of the five OPSSAT-AD folds come from the same June night, so the dispersion across folds is a lower bound of the real variance.
-- **Events cut short by a gap** match as [ADR 0008](docs/adr/0008-events-cut-by-a-gap.md) decides: the truncated event detects the annotation it overlaps, and a new event after the gap is a redundant alarm.
+- **Events cut short by a gap** match as [ADR 0008](docs/adr/0008-events-cut-by-a-gap.md) decides. The truncated event detects the annotation it overlaps. A new event after the gap is a redundant alarm if it falls on the same annotation, and an ordinary true positive if it falls on another. Redundant alarms are counted for `max_gap_s` of 60 s and 150 s.
 
 ## 5. Data model
 
